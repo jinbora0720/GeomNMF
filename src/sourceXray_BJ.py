@@ -485,7 +485,7 @@ def sourceXray(Y, K, seed=123, tol=1e-12,
                 seed=seed,
             )
             H_refined = Y_star[refined_idx]
-            logvol_refined, _ = log_intrinsic_volume_score(H_star_hat) # best_vol from nfindr_BJ is NOT the same vol
+            logvol_refined, _ = log_intrinsic_volume_score(H_refined) # best_vol from nfindr_BJ is NOT the same vol
 
             # only accept refinement if it actually improves volume in Y_star space
             if logvol_refined > logvol_before:
