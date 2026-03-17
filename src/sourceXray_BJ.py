@@ -484,12 +484,19 @@ def sourceXray(Y, K, seed=123, tol=1e-12,
                 init_idx=init_idx,
                 seed=seed,
             )
-            H_star_hat = Y_star[refined_idx]
-            logvol_hat, _ = log_intrinsic_volume_score(H_star_hat) # best_vol from nfindr_BJ is NOT the same vol
+            H_refined = Y_star[refined_idx]
+            logvol_refined, _ = log_intrinsic_volume_score(H_star_hat) # best_vol from nfindr_BJ is NOT the same vol
 
-            vol_ratio = np.exp(logvol_hat - logvol_before) # no improvement if near 1
-            # if verbose:
-            print(f"Greedy refinement done; log-vol {logvol_before:.4f} → {logvol_hat:.4f} (volume ratio: {vol_ratio:.3f}x)")
+            # only accept refinement if it actually improves volume in Y_star space
+            if logvol_refined > logvol_before:
+                H_star_hat = H_refined
+                logvol_hat = logvol_refined
+                # if verbose:
+                vol_ratio = np.exp(logvol_refined - logvol_before)
+                print(f"Greedy refinement accepted; log-vol {logvol_before:.4f} → {logvol_refined:.4f} (volume ratio: {vol_ratio:.3f}x)")
+            else:
+                # if verbose:
+                print(f"Greedy refinement rejected; refined log-vol {logvol_refined:.4f} did not improve over {logvol_before:.4f}")
 
     results = []
 
