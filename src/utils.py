@@ -1452,6 +1452,7 @@ def plot_C_matrix_grouped_by_k(
     show_err=True,              # if 3D input, show error bars (std)
     capsize=3, 
     savepath=None,
+    colors=None,
 ):
     """
     Plot grouped bars by source (k) with one bar per feature (j).
@@ -1507,10 +1508,19 @@ def plot_C_matrix_grouped_by_k(
                 kwargs["yerr"] = yerr
                 kwargs["error_kw"] = {"elinewidth": 1.2, "capsize": capsize}
 
+        # choose color for this feature
+        if colors is None:
+            c = None
+        elif isinstance(colors, dict):
+            c = colors.get(labels[j], None)
+        else:
+            c = colors[j]  # assume list/tuple length J
+
         ax.bar(
             x + j * width,
             C_mean[j, :],
             width,
+            color=c,
             label=labels[j],
             **kwargs,                                   # <- only present when needed
         )
@@ -1529,7 +1539,7 @@ def plot_C_matrix_grouped_by_k(
     if savepath:
         fig.savefig(savepath, dpi=200, bbox_inches="tight")
     plt.show()
-
+    
 # plot_W_by_covariate
 def _safe_kde(x, grid):
     x = np.asarray(x, float)

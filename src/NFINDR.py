@@ -52,7 +52,7 @@ def _init_indices_atgp(Z, K):
         idx.append(int(np.argmax(rnorm)))
     return np.array(idx, dtype=int)
 
-def nfindr_BJ(Y, K, max_iter=5, seed=None, normalize=True, init='atgp'):
+def nfindr_BJ(Y, K, max_iter=5, seed=None, normalize=True, init='atgp', init_idx=None):
     """
     SciPy-free N-FINDR (NumPy only).
 
@@ -107,7 +107,16 @@ def nfindr_BJ(Y, K, max_iter=5, seed=None, normalize=True, init='atgp'):
 
     # Initialize K indices
     rng = np.random.default_rng(seed)
-    if init == 'atgp':
+    if init_idx is not None:
+        init_idx = np.asarray(init_idx, dtype=int)
+        if init_idx.shape != (K,):
+            raise ValueError(f"init_idx must have exactly K={K} indices, got shape {init_idx.shape}.")
+        if len(set(init_idx.tolist())) != K:
+            raise ValueError("init_idx must not contain duplicate indices.")
+        if init_idx.min() < 0 or init_idx.max() >= N:
+            raise ValueError(f"init_idx indices must be in [0, N={N}).")
+        idx = init_idx.copy()
+    elif init == 'atgp':
         idx = _init_indices_atgp(Z, K)
     elif init == 'random':
         idx = _init_indices_random(N, K, rng)
@@ -120,16 +129,19 @@ def nfindr_BJ(Y, K, max_iter=5, seed=None, normalize=True, init='atgp'):
     for _ in range(max_iter):
         improved = False
         for j in range(K):
-            base = idx.copy()
-            best_j = base[j]
+            # Fixed reference: the K-1 indices that are NOT being replaced
+            locked = set(idx.tolist()) - {idx[j]}
+
+            best_j = idx[j]
             best_v = best_vol
+            trial = idx.copy()
 
             # Try replacing j-th vertex with every pixel
             for n in range(N):
-                if n in base:
+                if n in locked: # to avoide duplicates and zero volume
                     continue
-                base[j] = n
-                v = _simplex_volume(Z[base, :])
+                trial[j] = n
+                v = _simplex_volume(Z[trial, :])
                 if v > best_v:
                     best_v = v
                     best_j = n
