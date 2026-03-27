@@ -156,15 +156,30 @@ def _candidates_random_directions(Yc_proj_w, seed=123,
         print(f" done in {time.time()-start:.2f}s; #cands={len(chosen_sorted)}")
     return chosen_sorted, counts
 
-def project_to_simplex(v):
-    """Project a single vector v onto the probability simplex."""
-    v = np.asarray(v)
+def project_to_simplex(v: np.ndarray) -> np.ndarray:
+    """
+    Project a single vector *v* onto the probability simplex.
+
+    Uses the O(n log n) sort-based algorithm of Duchi et al. (2008).
+
+    Parameters
+    ----------
+    v : np.ndarray, shape (n,)
+        Input vector to project.
+
+    Returns
+    -------
+    w : np.ndarray, shape (n,)
+        Projection of *v* onto the unit probability simplex
+        ``{w ≥ 0, sum(w) = 1}``.
+    """
+    v = np.asarray(v, dtype=float)
     n = len(v)
-    u = np.sort(v)[::-1]
+    u = np.sort(v)[::-1] # v sorted in descending order
     cssv = np.cumsum(u)
-    rho = np.nonzero(u * np.arange(1, n+1) > (cssv - 1))[0][-1]
-    theta = (cssv[rho] - 1) / (rho + 1)
-    return np.maximum(v - theta, 0)
+    rho = np.nonzero(u * np.arange(1, n + 1) > (cssv - 1))[0][-1]
+    theta = (cssv[rho] - 1.0) / (rho + 1.0)
+    return np.maximum(v - theta, 0.0)
 
 def compute_C(mu, H):
     numerator = mu[:, None] * H
@@ -385,6 +400,7 @@ def sourceXray(Y, K, seed=123, tol=1e-12,
                T=20000, topk=1, max_K=None, # for random candidate method
                prune=False, min_K=None, # for pruning
                refine_greedy=False, # N-FINDR style refinement 
+               return_fit_diagnostics=False, # temporary solution not to damage running scripts but to have a similar functionality as GeomNMF 
                verbose=False):
     """
     For each of the top-10 candidate H_star_hat (by log-volume), estimates:
@@ -411,13 +427,14 @@ def sourceXray(Y, K, seed=123, tol=1e-12,
     mean = Y_star_reduced.mean(axis=0, keepdims=True)          # (1, J-1)
     Yc = Y_star_reduced - mean
     U, S, Vt = np.linalg.svd(Yc, full_matrices=False)
-    rank = int(np.sum(S > tol))
-    basis = Vt[:rank].T
+    mask = S > tol
+    basis = Vt[mask].T
 
     # project to intrinsic coords
     Yc_proj = Yc @ basis # (n, rank) 
     
     # Step 1: candidates
+    counts = None  # only populated for candidate_method="random"
     if candidate_method == "exact":
         if verbose: 
             print("Computing convex hull...", end="", flush=True)
@@ -440,8 +457,8 @@ def sourceXray(Y, K, seed=123, tol=1e-12,
         inv_sqrt_cov = evecs @ np.diag(1.0 / np.sqrt(evals)) @ evecs.T  # (rank, rank)
         Yc_proj_w = Yc_proj @ inv_sqrt_cov # (n, rank)
 
-        cand_idx, cand_counts = _candidates_random_directions(Yc_proj_w, seed=seed, T=T, topk=topk, max_K=max_K, verbose=verbose)
-        cand_proj = Yc_proj_w[cand_idx]  # projected coordinates
+        cand_idx, counts = _candidates_random_directions(Yc_proj_w, seed=seed, T=T, topk=topk, max_K=max_K, verbose=verbose)
+        cand_proj = Yc_proj[cand_idx]  
 
     else:
         raise ValueError("candidate_method must be 'exact' or 'random'")
@@ -457,6 +474,7 @@ def sourceXray(Y, K, seed=123, tol=1e-12,
         else:
             pruned_pts, pruned_idx_local = prune_close_points(cand_proj, min_K=min_K)
             cand_ambient = cand_ambient[pruned_idx_local]
+            cand_idx = cand_idx[pruned_idx_local]
             if verbose: 
                 print("Number of pruned candidates:", len(pruned_pts))
 
@@ -465,7 +483,8 @@ def sourceXray(Y, K, seed=123, tol=1e-12,
     # Step 2: Get H
     H_star_hat, logvol_hat = estimate_H_by_max_volume(H_candidates, K, verbose=verbose_flag)
     
-    # refine by greey search
+    # refine by greedy search
+    logvol_before = None
     if refine_greedy:
         if candidate_method == "exact" and not prune:
             if verbose:
@@ -491,12 +510,20 @@ def sourceXray(Y, K, seed=123, tol=1e-12,
             if logvol_refined > logvol_before:
                 H_star_hat = H_refined
                 logvol_hat = logvol_refined
-                # if verbose:
-                vol_ratio = np.exp(logvol_refined - logvol_before)
-                print(f"Greedy refinement accepted; log-vol {logvol_before:.4f} → {logvol_refined:.4f} (volume ratio: {vol_ratio:.3f}x)")
+                if verbose:
+                    vol_ratio = np.exp(logvol_refined - logvol_before)
+                    print(
+                            f"Greedy refinement accepted; log-vol "
+                            f"{logvol_before:.4f} → {logvol_refined:.4f} "
+                            f"(volume ratio: {vol_ratio:.3f}x)"
+                        )
             else:
-                # if verbose:
-                print(f"Greedy refinement rejected; refined log-vol {logvol_refined:.4f} did not improve over {logvol_before:.4f}")
+                if verbose:
+                    print(
+                        f"Greedy refinement rejected; refined log-vol "
+                        f"{logvol_refined:.4f} did not improve over "
+                        f"{logvol_before:.4f}"
+                    )
 
     results = []
 
@@ -508,4 +535,13 @@ def sourceXray(Y, K, seed=123, tol=1e-12,
 
     results.append((H_star_hat, W_tilde_hat, mu_tilde_hat, C_hat, logvol_hat))
 
+    if return_fit_diagnostics:
+        fit_diagnostics = {
+            "intrinsic_rank": int(mask.sum()),
+            "n_cand": len(H_candidates),
+            "cand_idx": cand_idx,
+            "direction_hit_counts": counts,                # np.ndarray if candidate_method="random", else None
+            "logvol_before_refinement": logvol_before,     # float if refine_greedy ran, else None
+        }
+        return results, fit_diagnostics
     return results
