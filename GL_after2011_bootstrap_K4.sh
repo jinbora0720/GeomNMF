@@ -12,6 +12,6 @@
 module load python/3.11
 echo "CPUs per task: $SLURM_CPUS_PER_TASK"
 
-srun python3 CB_after2011_bootstrap_K4.py 
+srun python3 GL_after2011_bootstrap_K4.py 
 
 
