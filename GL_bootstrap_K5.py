@@ -22,7 +22,7 @@ from sklearn.decomposition import NMF
 #-----------------------------------------------------------------------------------------------------------------------------#
 
 # GL data 
-df = pd.read_csv("data/GL_reduced_measurements_a2011_scaled.csv") 
+df = pd.read_csv("data/GL_measurements_scaled.csv") 
 df["SampleDate"] = pd.to_datetime(df["SampleDate"])
 Y = df.drop(columns="SampleDate")
 #-----------------------------------------------------------------------------------------------------------------------------#
@@ -33,12 +33,12 @@ outdir.mkdir(parents=True, exist_ok=True)
 
 # bootstrap settings
 seed = 1
-K = 4
-max_K = 100*K
+K = 5
+min_K = 20*K
 n, J = Y.shape
 
 # reference H 
-H_star = load(outdir/f"GL_a2011_scaled_K{K}_maxK{max_K}_results.joblib")[0]
+H_star = load(outdir/f"GL_scaled_K{K}_minK{min_K}_results.joblib")[0]
 
 # allocate save arrays
 results_boots = {
@@ -74,8 +74,8 @@ results_boots = {
 # Bootstrap 
 rep_env = os.environ.get("SLURM_ARRAY_TASK_ID")
 rep = int(rep_env) if rep_env else 1
-file_rep = outdir/f"K{K}/GL_a2011_scaled_K{K}_maxK{max_K}_bootstrap_rep{rep}.joblib"
-(outdir/f"K{K}").mkdir(parents=True, exist_ok=True)
+file_rep = outdir/f"v3_K{K}/GL_scaled_K{K}_minK{min_K}_bootstrap_rep{rep}.joblib"
+(outdir/f"v3_K{K}").mkdir(parents=True, exist_ok=True)
 if file_rep.exists():
     sys.exit(0)  # skip if already done
 seed_rep = seed+rep
@@ -91,9 +91,9 @@ Yb_star = Yb / rb
 # sourceXray
 start = time.time()
 H_star_hat, W_tilde_hat, mu_tilde_hat, Phi_hat, logvol_hat = sourceXray(Yb, K, seed=seed_rep, tol=1e-12,
-                                                                        candidate_method="random", # "random" (random directions)
-                                                                        T=20000, topk=1, max_K=max_K, # for random candidate method
-                                                                        verbose=True)[0]
+                                                                        prune=True, min_K=min_K, # for pruning
+                                                                        refine_greedy=True,
+                                                                        verbose=False)[0]
 end = time.time()
 results_boots["time"] = end - start
 results_boots["logvol"] = logvol_hat

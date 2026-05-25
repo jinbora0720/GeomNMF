@@ -22,7 +22,7 @@ from sklearn.decomposition import NMF
 #-----------------------------------------------------------------------------------------------------------------------------#
 
 # GL data 
-df = pd.read_csv("data/GL_reduced_v2_measurements_scaled.csv") 
+df = pd.read_csv("data/GL_measurements_scaled.csv") 
 df["SampleDate"] = pd.to_datetime(df["SampleDate"])
 Y = df.drop(columns="SampleDate")
 #-----------------------------------------------------------------------------------------------------------------------------#
@@ -33,12 +33,12 @@ outdir.mkdir(parents=True, exist_ok=True)
 
 # bootstrap settings
 seed = 1
-K = 5
-min_K = 20*K
+K = 6
+min_K = 10*K
 n, J = Y.shape
 
 # reference H 
-H_star = load(outdir/f"GL_reduced_v2_scaled_K{K}_minK{min_K}_results.joblib")[0]
+H_star = load(outdir/f"GL_scaled_K{K}_minK{min_K}_results.joblib")[0]
 
 # allocate save arrays
 results_boots = {
@@ -74,8 +74,8 @@ results_boots = {
 # Bootstrap 
 rep_env = os.environ.get("SLURM_ARRAY_TASK_ID")
 rep = int(rep_env) if rep_env else 1
-file_rep = outdir/f"v2_K{K}/GL_reduced_v2_scaled_K{K}_minK{min_K}_bootstrap_rep{rep}.joblib"
-(outdir/f"v2_K{K}").mkdir(parents=True, exist_ok=True)
+file_rep = outdir/f"v3_K{K}/GL_scaled_K{K}_minK{min_K}_bootstrap_rep{rep}.joblib"
+(outdir/f"v3_K{K}").mkdir(parents=True, exist_ok=True)
 if file_rep.exists():
     sys.exit(0)  # skip if already done
 seed_rep = seed+rep
