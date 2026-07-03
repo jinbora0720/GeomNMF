@@ -44,6 +44,7 @@ H_star = load(outdir/f"GL_scaled_K{K}_minK{min_K}_results.joblib")[0]
 results_boots = {
     "seed": np.nan,
 
+    # sourceXray results
     "time": np.nan,
     "logvol": np.nan, 
     "Phi_hat": np.empty((J, K), dtype=float),
@@ -68,6 +69,14 @@ results_boots = {
     "H_star_hat_lsnmf": np.empty((K, J), dtype=float),
     "mse_by_pollutant_lsnmf": np.full(J, np.nan),
     "mse_overall_lsnmf": np.nan,
+
+    # LS-NMF w/ regularization results
+    "time_lsnmf2": np.nan,       
+    "logvol_lsnmf2": np.nan,
+    "Phi_hat_lsnmf2": np.empty((J, K), dtype=float),
+    "H_star_hat_lsnmf2": np.empty((K, J), dtype=float),
+    "mse_by_pollutant_lsnmf2": np.full(J, np.nan),
+    "mse_overall_lsnmf2": np.nan,
 }
 #-----------------------------------------------------------------------------------------------------------------------------#
 
@@ -137,7 +146,7 @@ start = time.time()
 nmf_model = NMF(
     n_components=K,
     init="nndsvda",          # good default for nonnegative data
-    random_state=seed,   # tie to bootstrap seed for reproducibility
+    random_state=seed_rep,   # tie to bootstrap seed for reproducibility
     max_iter=1000,
     tol=1e-4
 )
@@ -169,6 +178,46 @@ results_boots["mse_overall_lsnmf"] = np.mean(e_lsnmf**2)
 H_star_hat_perm_lsnmf, mu_tilde_hat_perm_lsnmf, Phi_hat_perm_lsnmf, order_lsnmf = permute_estimates_to_match_truth(H_star, H_star_hat_lsnmf, mu_tilde_hat_lsnmf, Phi_hat_lsnmf)
 results_boots["Phi_hat_lsnmf"] = np.asarray(Phi_hat_perm_lsnmf)
 results_boots["H_star_hat_lsnmf"] = np.asarray(H_star_hat_perm_lsnmf)
+
+# LS-NMF w/ regularization
+start = time.time()
+nmf_model2 = NMF(
+    n_components=K,
+    init="nndsvda",          # good default for nonnegative data
+    random_state=seed_rep,   # tie to bootstrap seed for reproducibility
+    max_iter=1000,
+    tol=1e-4, 
+    alpha_W = 0.01, 
+    alpha_H = 0.01
+)
+
+W_nmf2 = nmf_model2.fit_transform(Yb_star)  # shape: (n, K)
+H_nmf2 = nmf_model2.components_            # shape: (K, J)
+
+## make H_nmf row-stochastic and adjust W_nmf accordingly 
+H_rs = H_nmf2.sum(axis=1, keepdims=True)  # shape (K, 1)
+H_star_hat_lsnmf2 = H_nmf2/H_rs            # each row sums to 1
+W_star_hat_lsnmf2 = W_nmf2*H_rs.T          # scale columns of W_nmf2
+
+## revert back to original scale
+W_tilde_hat_lsnmf2 = W_star_hat_lsnmf2 * rb     
+mu_tilde_hat_lsnmf2 = W_tilde_hat_lsnmf2.mean(axis=0)
+Phi_hat_lsnmf2 = compute_C(mu_tilde_hat_lsnmf2, H_star_hat_lsnmf2)
+end = time.time()
+results_boots["time_lsnmf2"] = end - start
+logvol_lsnmf2, _ = log_intrinsic_volume_score(H_star_hat_lsnmf2)
+results_boots["logvol_lsnmf2"] = logvol_lsnmf2
+
+## estimation error
+Yhat_lsnmf2 = W_tilde_hat_lsnmf2 @ H_star_hat_lsnmf2
+e_lsnmf2 = Yb - Yhat_lsnmf2
+results_boots["mse_by_pollutant_lsnmf2"] = np.mean(e_lsnmf2**2, axis=0)
+results_boots["mse_overall_lsnmf2"] = np.mean(e_lsnmf2**2)
+
+## permute
+H_star_hat_perm_lsnmf2, mu_tilde_hat_perm_lsnmf2, Phi_hat_perm_lsnmf2, order_lsnmf2 = permute_estimates_to_match_truth(H_star, H_star_hat_lsnmf2, mu_tilde_hat_lsnmf2, Phi_hat_lsnmf2)
+results_boots["Phi_hat_lsnmf2"] = np.asarray(Phi_hat_perm_lsnmf2)
+results_boots["H_star_hat_lsnmf2"] = np.asarray(H_star_hat_perm_lsnmf2)
 
 dump(results_boots, file_rep)   
 
