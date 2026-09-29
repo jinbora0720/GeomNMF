@@ -42,6 +42,11 @@ traj_long <- bind_rows(traj_3, traj_4, traj_5, traj_6, traj_7, traj_9, traj_10,
 # Load data #
 #===========#
 Y_df <- read_csv(paste0("~/Documents/Research/GeomNMF/data/GL_measurements.csv"))
+Y_df$SampleDate %>% range()
+Y_df %>% 
+  mutate(month = month(SampleDate, label = T)) %>% 
+  group_by(month) %>% 
+  summarize(n = n())
 plt_anthro <- Y_df %>%
   pivot_longer(c("Cu", "Ni", "Pb", "S", "Zn"), names_to = "pollutant", values_to = "value") %>% 
   group_by(pollutant) %>% 
